@@ -20,21 +20,16 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { Edit2, Plus, Trash2 } from "lucide-react";
-
-type GoalStatus = "not-started" | "in-progress" | "completed" | "on-hold";
-
-type GoalCategory = "career" | "health" | "relationships" | "personal-growth" | "finance" | "hobbies" | "other";
-
-type Goal = {
-  id: string;
-  name: string;
-  description: string;
-  status: GoalStatus;
-  category: GoalCategory | null;
-  createdAt: number;
-};
-
-const STORAGE_KEY = "goals-webapp";
+import { useAuth } from "@/contexts/auth-context";
+import {
+  subscribeToGoals,
+  addGoal as addGoalToFirebase,
+  updateGoal,
+  deleteGoal as deleteGoalFromFirebase,
+  type Goal,
+  type GoalStatus,
+  type GoalCategory,
+} from "@/lib/firebase/goals";
 
 const GOAL_CATEGORIES: Array<{ value: GoalCategory; label: string }> = [
   { value: "career", label: "Career" },
@@ -62,53 +57,51 @@ const STATUS_LOOKUP = STATUS_OPTIONS.reduce<Record<GoalStatus, (typeof STATUS_OP
 );
 
 export default function GoalsPage() {
+  const { user } = useAuth();
   const [goals, setGoals] = useState<Goal[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newGoalName, setNewGoalName] = useState("");
   const [newGoalDescription, setNewGoalDescription] = useState("");
   const [newGoalCategory, setNewGoalCategory] = useState<GoalCategory | null>(null);
 
+  // Subscribe to goals from Firebase
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (!saved) return;
-    try {
-      const parsed = JSON.parse(saved) as Goal[];
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setGoals(parsed);
-    } catch {
-      // ignore bad payloads
-    }
-  }, []);
+    if (!user) return;
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(goals));
-  }, [goals]);
+    const unsubscribe = subscribeToGoals(user.uid, (fetchedGoals) => {
+      setGoals(fetchedGoals);
+    });
 
-  const addGoal = useCallback(() => {
+    return () => unsubscribe();
+  }, [user]);
+
+  const addGoal = useCallback(async () => {
+    if (!user) return;
     const trimmed = newGoalName.trim();
     if (!trimmed) return;
-    const newGoal: Goal = {
-      id: crypto.randomUUID(),
+    
+    const newGoal: Omit<Goal, "id"> = {
       name: trimmed,
       description: newGoalDescription.trim(),
       status: "not-started",
       category: newGoalCategory,
       createdAt: Date.now(),
     };
-    setGoals((prev) => [...prev, newGoal]);
+    
+    await addGoalToFirebase(user.uid, newGoal);
     setNewGoalName("");
     setNewGoalDescription("");
     setNewGoalCategory(null);
-  }, [newGoalName, newGoalDescription, newGoalCategory]);
+  }, [user, newGoalName, newGoalDescription, newGoalCategory]);
 
-  const updateGoal = (id: string, updates: Partial<Goal>) => {
-    setGoals((prev) => prev.map((goal) => (goal.id === id ? { ...goal, ...updates } : goal)));
+  const updateGoalHandler = async (id: string, updates: Partial<Goal>) => {
+    if (!user) return;
+    await updateGoal(user.uid, id, updates);
   };
 
-  const removeGoal = (id: string) => {
-    setGoals((prev) => prev.filter((goal) => goal.id !== id));
+  const removeGoal = async (id: string) => {
+    if (!user) return;
+    await deleteGoalFromFirebase(user.uid, id);
   };
 
   const startEditing = (goal: Goal) => {
@@ -118,14 +111,14 @@ export default function GoalsPage() {
     setNewGoalCategory(goal.category);
   };
 
-  const saveEditing = () => {
-    if (!editingId) return;
+  const saveEditing = async () => {
+    if (!editingId || !user) return;
     const trimmed = newGoalName.trim();
     if (!trimmed) {
       cancelEditing();
       return;
     }
-    updateGoal(editingId, {
+    await updateGoalHandler(editingId, {
       name: trimmed,
       description: newGoalDescription.trim(),
       category: newGoalCategory,
@@ -321,7 +314,7 @@ export default function GoalsPage() {
                               {STATUS_OPTIONS.map((option) => (
                                 <DropdownMenuItem
                                   key={option.value}
-                                  onClick={() => updateGoal(goal.id, { status: option.value })}
+                                  onClick={() => updateGoalHandler(goal.id, { status: option.value })}
                                   className="text-sm"
                                 >
                                   {option.label}
@@ -331,7 +324,7 @@ export default function GoalsPage() {
                                 Category
                               </DropdownMenuLabel>
                               <DropdownMenuItem
-                                onClick={() => updateGoal(goal.id, { category: null })}
+                                onClick={() => updateGoalHandler(goal.id, { category: null })}
                                 className="text-sm"
                               >
                                 No category
@@ -339,7 +332,7 @@ export default function GoalsPage() {
                               {GOAL_CATEGORIES.map((category) => (
                                 <DropdownMenuItem
                                   key={category.value}
-                                  onClick={() => updateGoal(goal.id, { category: category.value })}
+                                  onClick={() => updateGoalHandler(goal.id, { category: category.value })}
                                   className="text-sm"
                                 >
                                   {category.label}

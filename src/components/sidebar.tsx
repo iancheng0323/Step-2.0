@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { FileText, Home, Target } from "lucide-react";
+import { useAuth } from "@/contexts/auth-context";
+import { Button } from "@/components/ui/button";
+import { FileText, Home, LogOut, Target } from "lucide-react";
 
 const navigation = [
   { name: "To-Do List", href: "/", icon: Home },
@@ -13,6 +15,7 @@ const navigation = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { user, logout } = useAuth();
 
   return (
     <div className="flex h-screen w-64 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -39,6 +42,19 @@ export function Sidebar() {
           );
         })}
       </nav>
+      <div className="border-t border-slate-200 p-4 dark:border-slate-800">
+        <div className="mb-2 px-3 text-xs text-muted-foreground">
+          {user?.email}
+        </div>
+        <Button
+          variant="ghost"
+          onClick={logout}
+          className="w-full justify-start gap-2 text-sm"
+        >
+          <LogOut className="size-4" />
+          Sign Out
+        </Button>
+      </div>
     </div>
   );
 }

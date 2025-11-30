@@ -1,76 +1,49 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Save } from "lucide-react";
-
-const STORAGE_KEY = "personal-brief-webapp";
+import { useAuth } from "@/contexts/auth-context";
+import { subscribeToBrief, saveBrief } from "@/lib/firebase/brief";
 
 export default function BriefPage() {
-  const [intro, setIntro] = useState(() => {
-    if (typeof window === "undefined") return "";
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (!saved) return "";
-    try {
-      const parsed = JSON.parse(saved) as {
-        intro: string;
-        whoYouAre: string;
-        whatYouWant: string;
-      };
-      return parsed.intro || "";
-    } catch {
-      return "";
-    }
-  });
-  const [whoYouAre, setWhoYouAre] = useState(() => {
-    if (typeof window === "undefined") return "";
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (!saved) return "";
-    try {
-      const parsed = JSON.parse(saved) as {
-        intro: string;
-        whoYouAre: string;
-        whatYouWant: string;
-      };
-      return parsed.whoYouAre || "";
-    } catch {
-      return "";
-    }
-  });
-  const [whatYouWant, setWhatYouWant] = useState(() => {
-    if (typeof window === "undefined") return "";
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (!saved) return "";
-    try {
-      const parsed = JSON.parse(saved) as {
-        intro: string;
-        whoYouAre: string;
-        whatYouWant: string;
-      };
-      return parsed.whatYouWant || "";
-    } catch {
-      return "";
-    }
-  });
+  const { user } = useAuth();
+  const [intro, setIntro] = useState("");
+  const [whoYouAre, setWhoYouAre] = useState("");
+  const [whatYouWant, setWhatYouWant] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = () => {
+  // Subscribe to brief from Firebase
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubscribe = subscribeToBrief(user.uid, (brief) => {
+      if (brief) {
+        setIntro(brief.intro || "");
+        setWhoYouAre(brief.whoYouAre || "");
+        setWhatYouWant(brief.whatYouWant || "");
+      }
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  const handleSave = async () => {
+    if (!user) return;
     setIsSaving(true);
-    if (typeof window === "undefined") {
-      setIsSaving(false);
-      return;
-    }
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
+    try {
+      await saveBrief(user.uid, {
         intro,
         whoYouAre,
         whatYouWant,
-      }),
-    );
-    setTimeout(() => setIsSaving(false), 300);
+      });
+    } catch (error) {
+      console.error("Error saving brief:", error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (

@@ -32,21 +32,18 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
 import { Eye, EyeOff, GripVertical, Palette, Plus, Trash2 } from "lucide-react";
+import { useAuth } from "@/contexts/auth-context";
+import {
+  subscribeToTodos,
+  addTodo as addTodoToFirebase,
+  updateTodo,
+  deleteTodo as deleteTodoFromFirebase,
+  reorderTodos,
+  type Todo,
+  type TodoColor,
+  type GoalCategory,
+} from "@/lib/firebase/todos";
 
-type TodoColor = "none" | "red" | "green" | "yellow" | "blue";
-
-type GoalCategory = "career" | "health" | "relationships" | "personal-growth" | "finance" | "hobbies" | "other";
-
-type Todo = {
-  id: string;
-  text: string;
-  done: boolean;
-  color: TodoColor;
-  category: GoalCategory | null;
-  createdAt: number;
-};
-
-const STORAGE_KEY = "todolist-webapp";
 const DEFAULT_COLOR: TodoColor = "none";
 
 const COLOR_OPTIONS: Array<{
@@ -81,6 +78,7 @@ const GOAL_CATEGORIES: Array<{ value: GoalCategory; label: string }> = [
 ];
 
 export default function Home() {
+  const { user } = useAuth();
   const [todos, setTodos] = useState<Todo[]>([]);
   const [showCompleted, setShowCompleted] = useState(true);
   const [pendingFocusId, setPendingFocusId] = useState<string | null>(null);
@@ -93,23 +91,16 @@ export default function Home() {
     }),
   );
 
+  // Subscribe to todos from Firebase
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
-  }, [todos]);
+    if (!user) return;
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    if (!saved) return;
-    try {
-      const parsed = JSON.parse(saved) as Todo[];
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setTodos(parsed);
-    } catch {
-      // ignore bad payloads
-    }
-  }, []);
+    const unsubscribe = subscribeToTodos(user.uid, (fetchedTodos) => {
+      setTodos(fetchedTodos);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   useEffect(() => {
     if (!pendingFocusId) return;
@@ -124,20 +115,25 @@ export default function Home() {
     return () => window.cancelAnimationFrame(frame);
   }, [pendingFocusId, todos.length]);
 
-  const addTodo = useCallback(() => {
-    const id = crypto.randomUUID();
-    const newEntry: Todo = {
-      id,
+  const addTodo = useCallback(async () => {
+    if (!user) return;
+    
+    // Calculate the next order value (max order + 1, or 0 if no todos)
+    const maxOrder = todos.length > 0 ? Math.max(...todos.map(t => t.order ?? 0)) : -1;
+    
+    const newEntry: Omit<Todo, "id"> = {
       text: "",
       done: false,
       color: DEFAULT_COLOR,
       category: null,
       createdAt: Date.now(),
+      order: maxOrder + 1,
     };
-    setTodos((prev) => [...prev, newEntry]);
+    
+    const id = await addTodoToFirebase(user.uid, newEntry);
     setShowCompleted(true);
     setPendingFocusId(id);
-  }, [setShowCompleted]);
+  }, [user, todos]);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -157,40 +153,45 @@ export default function Home() {
     [showCompleted, todos],
   );
 
-  const toggleTodo = (id: string, nextChecked: boolean) => {
-    setTodos((prev) => prev.map((todo) => (todo.id === id ? { ...todo, done: nextChecked } : todo)));
+  const toggleTodo = async (id: string, nextChecked: boolean) => {
+    if (!user) return;
+    await updateTodo(user.uid, id, { done: nextChecked });
   };
 
-  const updateTodoText = (id: string, text: string) => {
-    setTodos((prev) => prev.map((todo) => (todo.id === id ? { ...todo, text } : todo)));
+  const updateTodoText = async (id: string, text: string) => {
+    if (!user) return;
+    await updateTodo(user.uid, id, { text });
   };
 
-  const updateTodoColor = (id: string, color: TodoColor) => {
-    setTodos((prev) => prev.map((todo) => (todo.id === id ? { ...todo, color } : todo)));
+  const updateTodoColor = async (id: string, color: TodoColor) => {
+    if (!user) return;
+    await updateTodo(user.uid, id, { color });
   };
 
-  const updateTodoCategory = (id: string, category: GoalCategory | null) => {
-    setTodos((prev) => prev.map((todo) => (todo.id === id ? { ...todo, category } : todo)));
+  const updateTodoCategory = async (id: string, category: GoalCategory | null) => {
+    if (!user) return;
+    await updateTodo(user.uid, id, { category });
   };
 
-  const removeTodo = (id: string) => {
-    setTodos((prev) => prev.filter((todo) => todo.id !== id));
+  const removeTodo = async (id: string) => {
+    if (!user) return;
+    await deleteTodoFromFirebase(user.uid, id);
   };
 
   const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
+    async (event: DragEndEvent) => {
+      if (!user) return;
       const { active, over } = event;
       if (!over || active.id === over.id) return;
-      setTodos((prev) => {
-        const oldIndex = prev.findIndex((todo) => todo.id === active.id);
-        const newIndex = prev.findIndex((todo) => todo.id === over.id);
-        if (oldIndex === -1 || newIndex === -1) {
-          return prev;
-        }
-        return arrayMove(prev, oldIndex, newIndex);
-      });
+      
+      const oldIndex = todos.findIndex((todo) => todo.id === active.id);
+      const newIndex = todos.findIndex((todo) => todo.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return;
+      
+      const reorderedTodos = arrayMove(todos, oldIndex, newIndex);
+      await reorderTodos(user.uid, reorderedTodos);
     },
-    [setTodos],
+    [user, todos],
   );
 
   const handleInputKeyDown = (id: string, event: React.KeyboardEvent<HTMLInputElement>) => {
