@@ -131,7 +131,7 @@ export default function Home() {
   useEffect(() => {
     if (!user) return;
 
-    const unsubscribe = subscribeToTodos(user.uid, (fetchedTodos) => {
+    const callback = (fetchedTodos: Todo[]) => {
       setTodos(fetchedTodos);
       // Clear editing texts for todos that no longer exist or have been updated externally
       setEditingTexts(prev => {
@@ -153,7 +153,9 @@ export default function Home() {
         });
         return newState;
       });
-    }, listId || undefined);
+    };
+
+    const unsubscribe = subscribeToTodos(user.uid, callback, listId || undefined);
 
     return () => unsubscribe();
   }, [user, listId, focusedTodoId]);
