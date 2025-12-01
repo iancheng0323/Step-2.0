@@ -389,7 +389,9 @@ export default function Home() {
     if (!user || !currentText.trim() || rewritingId) return;
     
     setRewritingId(id);
-    console.log("🔄 Rewrite function called - using latest code version");
+    if (process.env.NODE_ENV === 'development') {
+      console.log("🔄 Rewrite function called - using latest code version");
+    }
     try {
       // Use the SDK from client-side (it knows the correct model names)
       const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
@@ -454,15 +456,21 @@ Rewritten:`;
       
       for (const modelName of modelsToTry) {
         try {
-          console.log(`Trying model: ${modelName}...`);
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`Trying model: ${modelName}...`);
+          }
           const model = genAI.getGenerativeModel({ model: modelName });
           const result = await model.generateContent(prompt);
           const response = await result.response;
           rewrittenText = response.text().trim();
-          console.log(`✅ Success with model: ${modelName}`);
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`✅ Success with model: ${modelName}`);
+          }
           break;
         } catch (e) {
-          console.warn(`❌ Model ${modelName} failed:`, e);
+          if (process.env.NODE_ENV === 'development') {
+            console.warn(`❌ Model ${modelName} failed:`, e);
+          }
           lastError = e instanceof Error ? e : new Error(String(e));
           continue;
         }

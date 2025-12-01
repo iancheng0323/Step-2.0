@@ -40,7 +40,9 @@ export default function BriefPage() {
         whatYouWant,
       });
     } catch (error) {
-      console.error("Error saving brief:", error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error("Error saving brief:", error);
+      }
     } finally {
       setIsSaving(false);
     }

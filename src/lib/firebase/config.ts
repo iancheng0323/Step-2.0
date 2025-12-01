@@ -1,6 +1,7 @@
 import { initializeApp, getApps, FirebaseApp } from "firebase/app";
 import { getAuth, Auth } from "firebase/auth";
 import { getFirestore, Firestore } from "firebase/firestore";
+import "../env-check";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -23,16 +24,19 @@ if (typeof window !== "undefined") {
   ];
 
   const missingVars = requiredEnvVars.filter(
-    (varName) => !process.env[varName],
+    (varName) => !process.env[varName] || process.env[varName]?.trim() === "",
   );
 
   if (missingVars.length > 0) {
-    console.error(
-      "Missing Firebase environment variables:",
+    console.warn(
+      "Missing or empty Firebase environment variables:",
       missingVars.join(", "),
     );
-    console.error(
+    console.warn(
       "Please check FIREBASE_SETUP.md for instructions on setting up Firebase.",
+    );
+    console.warn(
+      "Note: Make sure to restart the dev server after adding/changing .env.local file.",
     );
   }
 }

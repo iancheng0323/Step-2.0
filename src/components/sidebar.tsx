@@ -14,7 +14,6 @@ import {
   Trash2, 
   List,
   FileText,
-  ChevronRight,
 } from "lucide-react";
 import {
   subscribeToLists,
@@ -97,8 +96,7 @@ export function Sidebar() {
   // Get listId from URL
   useEffect(() => {
     if (pathname === "/") {
-      const params = new URLSearchParams(window.location.search);
-      const listId = params.get("listId");
+      const listId = searchParams.get("listId");
       if (listId) {
         setSelectedListId(listId);
       } else {
