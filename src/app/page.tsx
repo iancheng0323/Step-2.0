@@ -155,7 +155,9 @@ export default function Home() {
       });
     };
 
-    const unsubscribe = subscribeToTodos(user.uid, callback, listId || undefined);
+    const unsubscribe = listId 
+      ? subscribeToTodos(user.uid, callback, listId)
+      : subscribeToTodos(user.uid, callback);
 
     return () => unsubscribe();
   }, [user, listId, focusedTodoId]);
